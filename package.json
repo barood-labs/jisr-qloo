@@ -1,0 +1,13 @@
+{
+  "name": "jisr",
+  "version": "1.0.0",
+  "description": "Jisr · جسر: a Qloo-grounded agent that helps newcomers feel at home in a new city.",
+  "type": "module",
+  "license": "MIT",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "start": "node src/server.js",
+    "mcp": "node src/mcp.js",
+    "test": "node --test test/*.test.js"
+  }
+}

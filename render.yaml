@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: jisr
+    runtime: node
+    plan: free
+    buildCommand: "echo no build step"
+    startCommand: "node src/server.js"
+    healthCheckPath: /api/health
+    envVars:
+      - key: QLOO_API_KEY
+        sync: false
+      - key: LLM_BASE_URL
+        sync: false
+      - key: LLM_API_KEY
+        sync: false
+      - key: LLM_MODEL
+        sync: false

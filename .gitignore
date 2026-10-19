@@ -1,0 +1,7 @@
+node_modules/
+.env
+*.log
+PROGRESS.md
+api_key_form.md
+SUBMIT.md
+devpost_writeup.md

@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Jisr · جسر: feel at home in a new city</title>
+<style>
+:root{--ink:#1d2433;--muted:#5b6475;--bg:#faf7f2;--card:#fff;--accent:#0f766e;--gold:#b45309}
+*{box-sizing:border-box}body{margin:0;font:16px/1.5 system-ui,-apple-system,"Segoe UI","Noto Sans Arabic",sans-serif;background:var(--bg);color:var(--ink)}
+header{padding:28px 20px 8px;max-width:980px;margin:auto}h1{margin:0;font-size:30px}h1 span{color:var(--accent)}
+.sub{color:var(--muted);margin:4px 0 0}main{max-width:980px;margin:auto;padding:12px 20px 60px;display:grid;grid-template-columns:minmax(280px,360px) 1fr;gap:20px}
+@media(max-width:820px){main{grid-template-columns:1fr}}
+.card{background:var(--card);border-radius:14px;padding:18px;box-shadow:0 1px 3px #0001}
+label{display:block;font-size:13px;color:var(--muted);margin:10px 0 4px}input,select,textarea{width:100%;padding:9px 10px;border:1px solid #d9d3c7;border-radius:9px;font:inherit;background:#fff}
+.fav{display:grid;grid-template-columns:110px 1fr 30px;gap:6px;margin-bottom:6px}.fav button{border:0;background:#eee;border-radius:8px;cursor:pointer}
+button.go{margin-top:14px;width:100%;padding:12px;border:0;border-radius:10px;background:var(--accent);color:#fff;font-weight:600;font-size:16px;cursor:pointer}
+button.ghost{background:none;border:1px dashed #bbb;border-radius:8px;padding:6px 10px;cursor:pointer;color:var(--muted)}
+.trace{font:12px/1.5 ui-monospace,monospace;color:var(--muted);background:#f3f0ea;border-radius:10px;padding:10px;max-height:180px;overflow:auto;white-space:pre-wrap}
+.day{border-inline-start:3px solid var(--accent);padding:4px 0 4px 12px;margin:14px 0}[dir=rtl] .day{padding:4px 12px 4px 0}
+.day h3{margin:0 0 6px;font-size:15px;color:var(--accent)}.item{margin:6px 0}.item .sec{font-size:12px;color:var(--gold);text-transform:uppercase;letter-spacing:.04em}
+.item b{display:block}.why{color:var(--muted);font-size:14px}.pill{display:inline-block;font-size:11px;background:#e7f3f1;color:var(--accent);border-radius:20px;padding:1px 8px;margin-inline-start:6px}
+.banner{font-size:13px;background:#fff7e6;border:1px solid #f3d9a4;border-radius:10px;padding:8px 10px;margin-bottom:10px}
+</style>
+</head>
+<body>
+<header>
+  <h1>Jisr <span>· جسر</span></h1>
+  <p class="sub" id="tagline">Tell it what you love back home. It finds the places, music and shows in your new city that people with your exact taste love, and tells you why.</p>
+</header>
+<main>
+  <section class="card">
+    <label for="lang">Language · اللغة</label>
+    <select id="lang"><option value="en">English</option><option value="ar">العربية</option></select>
+    <label for="home">Home city</label><input id="home" value="Amman">
+    <label for="city">New city</label><input id="city" value="Salt Lake City">
+    <label>Things you love back home</label>
+    <div id="favs"></div>
+    <button class="ghost" id="add" type="button">+ add favorite</button>
+    <label for="need">Anything you're craving? (optional)</label>
+    <input id="need" placeholder="e.g. a Lebanese bakery, quiet cafe to study">
+    <button class="go" id="go">Build my first week</button>
+    <label>Agent steps</label><div class="trace" id="trace">Waiting…</div>
+  </section>
+  <section class="card" id="out"><p class="sub">Your plan will appear here. Every pick comes from Qloo's taste graph, with the home favorite that drove it.</p></section>
+</main>
+<script>
+const KINDS={artist:'Artist',place:'Place',movie:'Movie',tv_show:'TV show',book:'Book',podcast:'Podcast'};
+const defaults=[['artist','Fairuz'],['place','Habibah Sweets'],['tv_show','Bab Al-Hara'],['movie','Theeb']];
+const favs=document.getElementById('favs');
+function addFav(k='artist',n=''){const d=document.createElement('div');d.className='fav';
+ d.innerHTML=`<select>${Object.entries(KINDS).map(([v,l])=>`<option value="${v}" ${v===k?'selected':''}>${l}</option>`).join('')}</select><input value="${n.replace(/"/g,'&quot;')}"><button type="button" aria-label="remove">×</button>`;
+ d.querySelector('button').onclick=()=>d.remove();favs.appendChild(d);}
+defaults.forEach(([k,n])=>addFav(k,n));document.getElementById('add').onclick=()=>addFav();
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+fetch('/api/health').then(r=>r.json()).then(h=>{if(h.mock)document.getElementById('out').insertAdjacentHTML('afterbegin','<div class="banner">Demo mode: no Qloo key configured, showing synthetic placeholder data.</div>')});
+document.getElementById('go').onclick=async()=>{
+ const body={lang:lang.value,home_city:home.value,new_city:city.value,need:need.value,
+  favorites:[...favs.children].map(d=>({kind:d.querySelector('select').value,name:d.querySelector('input').value.trim()})).filter(f=>f.name)};
+ const tr=document.getElementById('trace');tr.textContent='';const out=document.getElementById('out');out.innerHTML='<p class="sub">Thinking…</p>';
+ const res=await fetch('/api/plan',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});
+ if(!res.ok){out.innerHTML=`<p>${esc((await res.json()).error)}</p>`;return}
+ const rd=res.body.getReader();const dec=new TextDecoder();let buf='';
+ for(;;){const {value,done}=await rd.read();if(done)break;buf+=dec.decode(value,{stream:true});let i;
+  while((i=buf.indexOf('\n'))>=0){const line=buf.slice(0,i);buf=buf.slice(i+1);if(!line)continue;const m=JSON.parse(line);
+   if(m.step){const s=m.step;tr.textContent+=(s.kind==='tool'?`→ ${s.name}(${JSON.stringify(s.args).slice(0,90)})`:s.kind==='result'?`  ✓ ${s.name}: ${s.count} results`:`• ${s.text}`)+'\n';tr.scrollTop=1e9}
+   if(m.error)out.innerHTML=`<p>${esc(m.error)}</p>`;
+   if(m.final)render(m.final)}}
+};
+function render(f){const out=document.getElementById('out');const p=f.plan;
+ if(!p){out.innerHTML='<p>Could not match your favorites. Try different spellings.</p>';return}
+ out.setAttribute('dir',p.dir||'ltr');
+ out.innerHTML=(f.mock?'<div class="banner">Demo mode: synthetic placeholder data.</div>':'')+`<h2>${esc(p.title)}</h2>`+(p.empty?`<p>${esc(p.empty)}</p>`:'')+
+ ((p.areas||[]).length?`<div class="day"><h3>${esc(p.areasTitle)}</h3>${p.areas.map(a=>`<div class="item"><b><a href="${esc(a.map)}" target="_blank" rel="noopener">${esc(a.label)}</a>${a.affinity!=null?`<span class="pill">${Math.round(a.affinity*100)}% match</span>`:''}</b><div class="why">${a.lat.toFixed(3)}, ${a.lon.toFixed(3)}</div></div>`).join('')}</div>`:'')+
+ (p.days||[]).map(d=>`<div class="day"><h3>${esc(d.label)}</h3>${d.items.map(it=>`<div class="item"><span class="sec">${esc(it.section)}</span><b>${esc(it.name)}${it.affinity!=null?`<span class="pill">${Math.round(it.affinity*100)}% match</span>`:''}</b>${it.detail?`<div class="why">${esc(it.detail)}</div>`:''}${it.why?`<div class="why">${esc(it.why)}</div>`:''}</div>`).join('')}</div>`).join('');}
+</script>
+</body>
+</html>
