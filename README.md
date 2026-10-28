@@ -2,72 +2,92 @@
 
 # Jisr · جسر
 
-**An agent that helps newcomers feel at home in a new city, grounded in Qloo's taste graph.**
+**An agent that helps newcomers feel at home in a new city — grounded in [Qloo](https://qloo.com)'s taste graph, not LLM guesses.**
 
-`Qloo Insights API` · `Entity Search` · `Tags` · `Explainability` · `Heatmaps` · `Agent tool loop` · `MCP server` · `English + Arabic (RTL)`
+### Live demo → [jisr-qloo.onrender.com](https://jisr-qloo.onrender.com)
+
+`Qloo Insights` · `Entity Search` · `Tags` · `Explainability` · `Heatmaps` · `Agent tool loop` · `MCP server` · `English + Arabic (RTL)`
 
 </div>
 
-## The problem
+## Problem → Qloo Taste API → explainable plan
 
-Every year millions of people move to a city where nothing tastes, sounds or feels familiar: students, refugees, new hires, families. Generic advice ("try the top-rated restaurants!") ignores the one thing that makes a place feel like home: **your own taste**. Ask a plain LLM and it guesses from stereotypes ("you're from Jordan, here's a falafel place").
+| Step | What happens | Qloo surface |
+|------|----------------|--------------|
+| 1. Tell Jisr what you love back home | singer, bakery, film, show… | — |
+| 2. Resolve favorites | map names → real entities | `/search` |
+| 3. Find places in the **new** city | cross-city, cross-domain affinity | `/v2/insights` + `filter.location` (+ optional `/v2/tags`) |
+| 4. Culture bridge | artists & films locals with your taste love | `/v2/insights` + `signal.location` |
+| 5. Neighborhoods | where that taste clusters | `/v2/insights` `urn:heatmap` |
+| 6. First-week plan | every pick cites the home favorite that drove it | `feature.explainability` → *"because you love Fairuz & Habibah"* |
 
-## What Jisr does
+**Why Qloo (not a plain LLM):** "places in Salt Lake City that people who love *this Amman bakery* also love" is a taste-graph query. An LLM alone invents; Qloo's graph returns ranked entities with explainability scores the agent is allowed to cite.
 
-You tell Jisr a few things you love back home: a singer, a bakery, a TV series, a film. It:
-
-1. **Resolves** each favorite to a real Qloo entity (`/search`).
-2. **Finds places in your new city** with the highest taste affinity to those favorites (`/v2/insights`, `filter.type=urn:entity:place`, `filter.location.query=<new city>`), optionally narrowed by a craving through a real Qloo tag (`/v2/tags` → `filter.tags`).
-3. **Builds a culture bridge:** artists and films/shows that people *in your new city* who share your taste love (`signal.location.query`), so you connect with locals instead of living in a bubble.
-4. **Explains every pick** with `feature.explainability`: "Day 3: Cafe X, *because you love Fairuz & Habibah*". The agent can only cite favorites that Qloo's explainability scores actually point to.
-5. **Shows where your taste lives in the city** with a Qloo heatmap (`filter.type=urn:heatmap`): the 3 areas where people who share your taste cluster, linked to a map. That's where to look for an apartment, spend a weekend, or meet people like you.
-6. Writes a **7-day "first week" plan** in English or Arabic (full RTL).
-
-**Why it needs Qloo:** the core move, "places in Salt Lake City that people who love *this specific bakery in Amman* also love", is a cross-domain, cross-city taste query. An LLM alone cannot do that without inventing things; Qloo's graph can.
+Try the live demo with the defaults (Amman → Salt Lake City, Fairuz + Habibah Sweets). Health at `/api/health` should show `"mock": false` when the Render `QLOO_API_KEY` is set.
 
 ## Agent design
 
 ```
-user favorites ─► resolve_favorites ─► places_like_home ─► culture_bridge(artist) ─► culture_bridge(movie|tv) ─► neighborhoods_like_home ─► compose plan
-                     (/search)          (/v2/insights        (/v2/insights            (/v2/insights               (/v2/insights               (explainability
-                                         + filter.location)   + signal.location)       + signal.location)          urn:heatmap)                → "because…")
+favorites → resolve_favorites → places_like_home → culture_bridge(artist)
+         → culture_bridge(movie|tv) → neighborhoods_like_home → compose plan
+           (/search)          (/v2/insights)      (/v2/insights)     (explainability → "because…")
 ```
 
-- **Two brains, one tool set.** With `LLM_BASE_URL`/`LLM_API_KEY` set, any OpenAI-compatible model drives the tools by function calling and writes the plan (the system prompt forbids anything not returned by a tool). Without an LLM, a deterministic planner runs the same tools, so the demo never breaks.
-- **MCP server** (`npm run mcp`): the same tools plus `first_week_plan` for any MCP client (Claude Desktop, Cursor and others). That is the "wire Qloo into an agent you already have" path.
-- **Streaming trace:** the UI shows each tool call live, so judges can see the agent work.
-- **Request shapes match Qloo's official harness.** Every call mirrors the request the official `@qloo/qloo-harness` workflows build (`find_tags` with `feature.semantic_search`, `recommend` with `feature.explainability`, `where_popular` with `urn:heatmap`). `scripts/live_check.mjs` checks all of them against the live hackathon API and prints only response shapes, never Qloo data.
-- **Zero dependencies:** pure Node 20 (`http`, `fetch`, `node:test`). `npm install` is not needed.
-- Private in-memory caching only; no Qloo data is committed (the test fixtures are synthetic placeholders).
+- **Two brains, one tool set.** With `LLM_BASE_URL` / `LLM_API_KEY`, any OpenAI-compatible model drives tools by function calling. Without an LLM, a deterministic planner runs the same tools so the demo never breaks.
+- **MCP server** (`npm run mcp`): same tools + `first_week_plan` for Claude Desktop, Cursor, etc.
+- **Streaming trace:** the UI shows each tool call live so judges can watch the agent work.
+- **Harness-shaped requests:** calls mirror `@qloo/qloo-harness` workflows. `scripts/live_check.mjs` checks shapes against the live hackathon API (prints shapes only, never Qloo payloads).
+- **Zero dependencies:** pure Node 20 (`http`, `fetch`, `node:test`). No `npm install` needed.
+- Private in-memory cache only; no Qloo data is committed (test fixtures are synthetic placeholders).
 
-## Run it
+## Run locally
 
 ```bash
-cp .env.example .env    # add QLOO_API_KEY (hackathon key, base URL https://hackathon.api.qloo.com)
+git clone https://github.com/barood-labs/jisr-qloo.git && cd jisr-qloo
+cp .env.example .env    # set QLOO_API_KEY (hackathon key → https://hackathon.api.qloo.com)
 export $(grep -v '^#' .env | xargs)
 npm start               # http://localhost:8787
-npm test                # 8 offline tests (synthetic data), Node 20 and 22
-node scripts/live_check.mjs "Salt Lake City"   # live check, needs QLOO_API_KEY
-npm run mcp             # MCP server over stdio
+npm test                # offline tests (synthetic data), Node 20+
+node scripts/live_check.mjs "Salt Lake City"   # needs QLOO_API_KEY
+npm run mcp             # MCP over stdio
 ```
 
-MCP client config:
+MCP client snippet:
 
 ```json
-{ "mcpServers": { "jisr": { "command": "node", "args": ["/path/to/jisr/src/mcp.js"], "env": { "QLOO_API_KEY": "..." } } } }
+{ "mcpServers": { "jisr": { "command": "node", "args": ["/path/to/jisr-qloo/src/mcp.js"], "env": { "QLOO_API_KEY": "…" } } } }
 ```
 
-Deploy: `render.yaml` (Render free web service) or the `Dockerfile` (any container host).
+**Deploy:** live service is on Render (`render.yaml`). Or use the `Dockerfile`. Keep `QLOO_API_KEY` in the host env — never commit it.
 
 ## API
 
-`POST /api/plan` with `{ "home_city": "Amman", "new_city": "Salt Lake City", "lang": "en"|"ar", "need": "lebanese bakery", "favorites": [{ "kind": "artist", "name": "Fairuz" }] }`. It returns NDJSON: `{"step":…}` lines while the agent works, then `{"final":{"plan":…}}`.
+- `GET /api/health` → `{ "ok": true, "mock": false, "llm": false }` when live Qloo is configured.
+- `POST /api/plan` with:
 
-## Limitations (what the results do not establish)
+```json
+{
+  "home_city": "Amman",
+  "new_city": "Salt Lake City",
+  "lang": "en",
+  "need": "lebanese bakery",
+  "favorites": [{ "kind": "artist", "name": "Fairuz" }]
+}
+```
 
-- Qloo affinities describe what *groups* with a similar taste tend to like, not what one person will do. Jisr presents picks as "people who love X also love Y", never as a prediction about you.
-- Heatmap areas are taste clusters, not housing, safety or price advice.
-- No personal data is sent to Qloo: only the names of public favorites (artists, places, titles) and city names. Nothing is stored server-side beyond a short in-memory cache.
+Returns NDJSON: `{"step":…}` while the agent works, then `{"final":{"plan":…,"mock":false}}`.
+
+## Limitations
+
+- Affinities describe what *groups* with similar taste tend to like, not what one person will do. Jisr says "people who love X also love Y", never a personal prediction.
+- Heatmap areas are taste clusters, not housing / safety / price advice. If the hackathon heatmap is empty for a city, the 7-day place + culture plan still runs.
+- Only public favorite names and city names are sent to Qloo. Nothing is stored server-side beyond a short in-memory cache.
+
+## Links
+
+- **Live demo:** https://jisr-qloo.onrender.com
+- **Repo:** https://github.com/barood-labs/jisr-qloo
+- **Devpost:** https://devpost.com/software/jisr-2l45p0
 
 ## License
 
